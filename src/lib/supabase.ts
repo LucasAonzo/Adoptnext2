@@ -1,73 +1,144 @@
 import { createClient } from '@supabase/supabase-js';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { NextResponse } from 'next/server';
+import { type CookieOptions } from '@supabase/ssr';
 import { type Pet } from '@/types/pets';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+// Environment variables for Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Create a standard Supabase client
-const supabaseStandard = createClient(supabaseUrl, supabaseAnonKey);
+// Parse project reference from URL for cookie naming
+const projectRefMatch = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/);
+export const projectRef = projectRefMatch ? projectRefMatch[1] : '';
+export const authCookieName = `sb-${projectRef}-auth-token`;
 
-// Create a client component client for browser usage with better session handling
-export const supabase = typeof window !== 'undefined' 
-  ? createClientComponentClient() 
-  : supabaseStandard;
+// Standard cookie settings for consistency
+export const DEFAULT_COOKIE_OPTIONS = {
+  path: '/',
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 60 * 60 * 24 * 7, // 7 days
+};
 
-// Helper functions for auth
-export const signUp = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signUp({
+// Create a standard client for client-side usage
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
+});
+
+// Create browser client that works in client components
+export const createBrowserClient = () => {
+  return createClientComponentClient({
+    supabaseUrl,
+    supabaseKey: supabaseAnonKey,
+  });
+};
+
+// Debug function to check all auth cookies
+export function checkAuthCookies(): string[] {
+  if (typeof window === 'undefined') return [];
+  
+  return document.cookie
+    .split('; ')
+    .filter(row => row.startsWith('sb-') && row.includes('-auth-token'))
+    .map(cookie => cookie.split('=')[0]);
+}
+
+// Helper to clear all auth cookies
+export function clearAllAuthCookies() {
+  if (typeof window === 'undefined') return;
+  
+  const authCookies = checkAuthCookies();
+  authCookies.forEach(name => {
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    console.log(`Cleared auth cookie: ${name}`);
+  });
+}
+
+// Export authentication helpers for consistent usage
+export async function signUp(email: string, password: string) {
+  return supabase.auth.signUp({
     email,
     password,
   });
-  return { data, error };
-};
+}
 
-export const signIn = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
+export async function signIn(email: string, password: string) {
+  return supabase.auth.signInWithPassword({
     email,
     password,
   });
-  return { data, error };
-};
+}
 
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  return { error };
-};
+export async function signOut() {
+  // Clear all cookies before signing out to avoid stale cookies
+  clearAllAuthCookies();
+  return supabase.auth.signOut();
+}
 
-export const resetPassword = async (email: string) => {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth/reset-password`,
-  });
-  return { data, error };
-};
+export async function resetPassword(email: string) {
+  return supabase.auth.resetPasswordForEmail(email);
+}
 
-export const updatePassword = async (password: string) => {
-  const { data, error } = await supabase.auth.updateUser({
+export async function updatePassword(password: string) {
+  return supabase.auth.updateUser({
     password,
   });
-  return { data, error };
-};
+}
 
-export const getCurrentUser = async () => {
-  const { data, error } = await supabase.auth.getUser();
-  return { data, error };
-};
+export async function getUser() {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    return data.user;
+  } catch (error) {
+    console.error('Error getting user:', error);
+    return null;
+  }
+}
 
-export const getSession = async () => {
-  const { data, error } = await supabase.auth.getSession();
-  return { data, error };
-};
+export async function getSession() {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data.session;
+  } catch (error) {
+    console.error('Error getting session:', error);
+    return null;
+  }
+}
 
+// Manually refresh the session - useful for debugging and error recovery
+export async function refreshSession() {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    console.log('Session refresh attempt:', { 
+      success: !!data.session,
+      error: error?.message || null
+    });
+    return { session: data.session, error };
+  } catch (error) {
+    console.error('Error refreshing session:', error);
+    return { session: null, error };
+  }
+}
+
+// Helper functions for pets-related operations
 export async function getPets() {
   const { data, error } = await supabase
     .from('pets')
     .select('*')
     .order('created_at', { ascending: false });
-
+  
   if (error) {
-    throw new Error(`Error fetching pets: ${error.message}`);
+    console.error('Error fetching pets:', error);
+    return [];
   }
-
+  
   return data as Pet[];
 } 

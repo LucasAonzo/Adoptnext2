@@ -80,10 +80,20 @@ export function Navbar() {
       );
     }
     
+    // Log auth state for debugging
+    console.log('Navbar auth state:', { isAuthenticated, user, isLoading });
+    
     if (isAuthenticated && user) {
       // User is authenticated
       return (
         <div className="flex items-center gap-4">
+          {/* Add debug info */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="hidden md:block text-xs text-muted-foreground">
+              {user?.email?.split('@')[0] || 'User'} (Auth: {isAuthenticated ? 'Yes' : 'No'})
+            </div>
+          )}
+          
           <Link href="/profile" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <User size={18} />
@@ -115,7 +125,7 @@ export function Navbar() {
     
     // User is not authenticated
     return (
-      <Link href="/login">
+      <Link href="/auth">
         <Button variant="default" size="sm" className="gap-1">
           <LogIn size={16} />
           <span>Login</span>

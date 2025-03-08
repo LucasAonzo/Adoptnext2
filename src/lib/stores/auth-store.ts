@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { User, Session, AuthError, AuthChangeEvent } from '@supabase/supabase-js';
+import { supabase, createBrowserClient, checkAuthCookies, clearAllAuthCookies } from '@/lib/supabase';
 
 // Flag to track if auth has been initialized
 let authInitialized = false;
@@ -19,6 +20,7 @@ interface AuthState {
   isAuthenticated: boolean;
   initialized: boolean;
   forceUpdate: number; // Counter to force UI updates
+  cookieMismatch: boolean; // Flag to detect cookie/session mismatch
 
   // Actions
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
@@ -26,6 +28,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   refreshSession: () => Promise<void>;
+  checkAndFixAuth: () => Promise<boolean>; // New method to fix auth issues
   
   // Internal actions (not typically called directly by components)
   setUser: (user: User | null) => void;
@@ -33,6 +36,7 @@ interface AuthState {
   setLoading: (isLoading: boolean) => void;
   setAuthenticated: (isAuthenticated: boolean) => void;
   setInitialized: (initialized: boolean) => void;
+  setCookieMismatch: (mismatch: boolean) => void;
   handleAuthChange: (event: AuthChangeEvent, session: Session | null) => void;
 }
 
@@ -65,8 +69,8 @@ const syncLocalStorage = (state: Partial<Pick<AuthState, 'user' | 'session' | 'i
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => {
-      // Create Supabase client
-      const supabase = createClientComponentClient();
+      // Create a client for browser usage
+      const clientSupabase = typeof window !== 'undefined' ? createBrowserClient() : supabase;
       
       return {
         // Initial state
@@ -76,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: false,
         initialized: false,
         forceUpdate: 0,
+        cookieMismatch: false,
         
         // Set state actions
         setUser: (user) => {
@@ -96,9 +101,13 @@ export const useAuthStore = create<AuthState>()(
         setInitialized: (initialized) => {
           set({ initialized });
         },
+        setCookieMismatch: (cookieMismatch) => {
+          set({ cookieMismatch });
+        },
         
         // Handle auth state changes
         handleAuthChange: (event, session) => {
+          console.log('Auth state change:', event, session?.user?.email || 'No user');
           const currentState = get();
           const timestamp = getTimestamp();
           
@@ -106,6 +115,15 @@ export const useAuthStore = create<AuthState>()(
             // Store the SIGNED_IN timestamp in localStorage
             if (typeof window !== 'undefined') {
               localStorage.setItem(LAST_SIGNED_IN_KEY, Date.now().toString());
+            }
+            
+            // Check if auth cookies exist
+            const authCookies = checkAuthCookies();
+            if (authCookies.length === 0) {
+              console.warn('SIGNED_IN event but no auth cookies found - possible cookie issue');
+              set({ cookieMismatch: true });
+            } else {
+              set({ cookieMismatch: false });
             }
           }
           
@@ -130,7 +148,8 @@ export const useAuthStore = create<AuthState>()(
               session: null,
               isAuthenticated: false,
               isLoading: false,
-              forceUpdate: currentState.forceUpdate + 1
+              forceUpdate: currentState.forceUpdate + 1,
+              cookieMismatch: false
             };
             set(newState);
             syncLocalStorage({
@@ -144,6 +163,18 @@ export const useAuthStore = create<AuthState>()(
               localStorage.removeItem(LAST_SIGNED_IN_KEY);
             }
           } else if (event === 'INITIAL_SESSION') {
+            // On initial session, check for auth cookies
+            const authCookies = checkAuthCookies();
+            const hasCookies = authCookies.length > 0;
+            const hasSession = !!session?.user;
+            
+            // Detect potential cookie/session mismatch
+            const mismatch = hasCookies && !hasSession;
+            
+            if (mismatch) {
+              console.warn('Cookie/session mismatch detected: cookies exist but no session found');
+            }
+            
             // Check if we had a recent SIGNED_IN event
             const lastSignedInTime = typeof window !== 'undefined' ? 
               localStorage.getItem(LAST_SIGNED_IN_KEY) : null;
@@ -174,7 +205,8 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: newIsAuthenticated,
               isLoading: false,
               initialized: true,
-              forceUpdate: currentState.forceUpdate + 1
+              forceUpdate: currentState.forceUpdate + 1,
+              cookieMismatch: mismatch
             };
             
             set(newState);
@@ -186,12 +218,100 @@ export const useAuthStore = create<AuthState>()(
           }
         },
         
+        // Check and fix auth issues
+        checkAndFixAuth: async () => {
+          try {
+            set({ isLoading: true });
+            console.log('Checking and fixing auth state...');
+            
+            // 1. Check cookies and session state
+            const authCookies = checkAuthCookies();
+            console.log('Auth cookies found:', authCookies);
+            
+            const { data, error } = await clientSupabase.auth.getSession();
+            console.log('Session check result:', { 
+              hasSession: !!data.session, 
+              hasUser: !!data.session?.user,
+              error: error?.message || null 
+            });
+            
+            if (data.session?.user) {
+              // Session is valid, update store and return
+              set({ 
+                session: data.session,
+                user: data.session.user,
+                isAuthenticated: true,
+                isLoading: false,
+                cookieMismatch: false
+              });
+              return true;
+            }
+            
+            if (authCookies.length > 0 && !data.session) {
+              // Cookie/session mismatch detected
+              console.log('Cookie/session mismatch detected, attempting to fix...');
+              set({ cookieMismatch: true });
+              
+              // Clear all auth cookies to avoid stale data
+              clearAllAuthCookies();
+              
+              // Try to refresh the session
+              const refreshResult = await clientSupabase.auth.refreshSession();
+              console.log('Session refresh result:', {
+                success: !!refreshResult.data.session,
+                error: refreshResult.error?.message || null
+              });
+              
+              if (refreshResult.data.session) {
+                // Session refresh worked, update store and return
+                set({
+                  session: refreshResult.data.session,
+                  user: refreshResult.data.session.user,
+                  isAuthenticated: true,
+                  isLoading: false,
+                  cookieMismatch: false
+                });
+                return true;
+              }
+              
+              // If refresh failed, we're truly not authenticated
+              set({
+                session: null,
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                cookieMismatch: false
+              });
+              return false;
+            }
+            
+            // No cookies and no session = not authenticated
+            if (authCookies.length === 0 && !data.session) {
+              set({
+                session: null,
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                cookieMismatch: false
+              });
+              return false;
+            }
+            
+            return !!data.session;
+          } catch (error) {
+            console.error('Error checking auth state:', error);
+            return false;
+          } finally {
+            set({ isLoading: false });
+          }
+        },
+        
         // Refresh session
         refreshSession: async () => {
           try {
             set({ isLoading: true });
             
-            const { data, error } = await supabase.auth.getSession();
+            const { data, error } = await clientSupabase.auth.getSession();
             
             if (error) {
               console.error('Error refreshing session:', error);
@@ -199,6 +319,12 @@ export const useAuthStore = create<AuthState>()(
             }
             
             const currentState = get();
+            
+            // Check for cookie/session mismatches
+            const authCookies = checkAuthCookies();
+            const hasCookies = authCookies.length > 0;
+            const hasSession = !!data.session?.user;
+            const mismatch = hasCookies && !hasSession;
             
             // Determine new authentication state:
             // 1. If session has a user, set to true
@@ -218,7 +344,8 @@ export const useAuthStore = create<AuthState>()(
               session: data.session || currentState.session,
               isAuthenticated: newIsAuthenticated,
               isLoading: false,
-              forceUpdate: currentState.forceUpdate + 1
+              forceUpdate: currentState.forceUpdate + 1,
+              cookieMismatch: mismatch
             };
             
             set(newState);
@@ -234,33 +361,45 @@ export const useAuthStore = create<AuthState>()(
           }
         },
         
-        // Sign in - MODIFIED: Don't update state here, let auth state change listener handle it
+        // Sign in
         signIn: async (email, password) => {
           try {
             set({ isLoading: true });
             
-            const { data, error } = await supabase.auth.signInWithPassword({
+            // First clear any existing auth cookies
+            clearAllAuthCookies();
+            
+            const { data, error } = await clientSupabase.auth.signInWithPassword({
               email,
               password
             });
             
-            // Force a sync with localStorage if sign-in was successful
             if (!error && data.session) {
               // Store the SIGNED_IN timestamp in localStorage
               if (typeof window !== 'undefined') {
                 localStorage.setItem(LAST_SIGNED_IN_KEY, Date.now().toString());
               }
               
-              // Only sync the session to localStorage, don't update the state
-              syncLocalStorage({
-                session: data.session
+              // Check if auth cookies exist
+              const authCookies = checkAuthCookies();
+              const cookieMismatch = authCookies.length === 0;
+              
+              if (cookieMismatch) {
+                console.warn('Sign-in successful but no auth cookies found - possible cookie issue');
+              }
+              
+              set({
+                user: data.session.user,
+                session: data.session,
+                isAuthenticated: true,
+                cookieMismatch
               });
             }
             
             return { error };
           } catch (error) {
-            console.error('Error signing in:', error);
-            return { error: error as AuthError };
+            console.error('Unexpected error in signIn:', error);
+            return { error: { message: 'Unexpected error occurred' } as AuthError };
           } finally {
             set({ isLoading: false });
           }
@@ -271,7 +410,7 @@ export const useAuthStore = create<AuthState>()(
           try {
             set({ isLoading: true });
             
-            const { data, error } = await supabase.auth.signUp({
+            const { data, error } = await clientSupabase.auth.signUp({
               email,
               password,
               options: {
@@ -291,7 +430,7 @@ export const useAuthStore = create<AuthState>()(
         // Sign out
         signOut: async () => {
           try {
-            await supabase.auth.signOut();
+            await clientSupabase.auth.signOut();
             
             // Clear the SIGNED_IN timestamp
             if (typeof window !== 'undefined') {
@@ -305,7 +444,7 @@ export const useAuthStore = create<AuthState>()(
         // Reset password
         resetPassword: async (email) => {
           try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            const { error } = await clientSupabase.auth.resetPasswordForEmail(email, {
               redirectTo: `${window.location.origin}/auth/reset-password/confirm`
             });
             

@@ -1,68 +1,77 @@
-import { createServerClient } from '@supabase/ssr';
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { projectRef } from '@/lib/supabase';
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: any) {
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-        },
-        remove(name: string, options: any) {
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
-        },
-      },
-    }
-  );
-
-  const { data: { session } } = await supabase.auth.getSession();
-
-  // Protected routes that require authentication
-  const protectedRoutes = ['/profile', '/adopt'];
+  // Log the request URL for debugging
+  console.log('Middleware - Processing URL:', request.nextUrl.pathname);
   
-  // If user is not signed in and trying to access a protected route,
-  // redirect the user to /auth
-  if (!session && protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = '/auth';
-    
-    // Add the original URL as a redirect parameter
-    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname);
-    
-    return NextResponse.redirect(redirectUrl);
-  }
+  // Get all cookies for debugging
+  const allCookies = Array.from(request.cookies.getAll()).map(c => c.name);
+  console.log('Middleware - All cookies:', allCookies);
+  
+  // Check for auth cookies with any Supabase project reference
+  const authCookies = allCookies.filter(name => 
+    name.startsWith('sb-') && name.includes('-auth-token')
+  );
+  console.log('Middleware - Auth cookies found:', authCookies);
+  
+  // Check specific project cookie
+  const projectCookie = `sb-${projectRef}-auth-token`;
+  const hasProjectCookie = request.cookies.has(projectCookie);
+  console.log(`Middleware - Project-specific auth cookie (${projectCookie}) present:`, hasProjectCookie);
+  
+  // Initialize response that we'll modify with cookies if needed
+  let response = NextResponse.next();
+  
+  // Create and initialize Supabase client with proper cookie handling
+  const supabase = createMiddlewareClient({ req: request, res: response });
+  
+  try {
+    // Check the auth state using verifyAuth to handle cookies correctly
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  // If user is signed in and the current path is /auth,
-  // redirect the user to / or the redirect URL if provided
-  if (session && request.nextUrl.pathname.startsWith('/auth')) {
-    const redirectTo = request.nextUrl.searchParams.get('redirect') || '/';
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = redirectTo;
-    redirectUrl.search = '';
-    return NextResponse.redirect(redirectUrl);
-  }
+    // Debug logging
+    if (session) {
+      console.log('Middleware - Session found for user:', session.user.id);
+    } else {
+      console.log('Middleware - No valid session found');
+      
+      if (hasProjectCookie) {
+        console.log('Middleware - Auth cookie exists but no session - possible invalid/expired token');
+      }
+    }
 
-  return response;
+    // Handle '/auth' path - redirect away if already authenticated
+    if (session && request.nextUrl.pathname.startsWith('/auth')) {
+      const redirectPath = new URL(
+        request.nextUrl.searchParams.get('redirect') || '/',
+        request.url
+      );
+      console.log('Middleware - User already authenticated, redirecting from /auth to:', redirectPath.pathname);
+      return NextResponse.redirect(redirectPath);
+    }
+
+    // Handle protected routes - but don't redirect profile pages,
+    // let the client components handle auth to avoid redirect loops
+    if (!session && !request.nextUrl.pathname.startsWith('/profile')) {
+      // For protected API routes, return unauthorized
+      if (request.nextUrl.pathname.startsWith('/api/protected')) {
+        return new NextResponse(
+          JSON.stringify({ error: 'Authentication required' }),
+          { status: 401, headers: { 'content-type': 'application/json' } }
+        );
+      }
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Middleware - Error checking authentication:', error);
+    return response;
+  }
 }
 
 export const config = {
