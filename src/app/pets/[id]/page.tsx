@@ -21,8 +21,8 @@ const DEFAULT_IMAGE_URL = 'https://images.unsplash.com/photo-1543466835-00a7907e
 
 // Generate metadata for the page
 export async function generateMetadata({ params }: { params: PageParams }): Promise<Metadata> {
-  // Extract the id from params
-  const id = params?.id;
+  // Extract the id from params - make sure to await
+  const id = await Promise.resolve(params.id);
   
   if (!id) {
     return {
@@ -42,14 +42,26 @@ export async function generateMetadata({ params }: { params: PageParams }): Prom
     }
     
     return {
-      title: `${pet.name} - Adopt Me`,
-      description: pet.description || `Meet ${pet.name}, a lovely pet looking for a home`,
+      title: `${pet.name} - Adopt a Pet`,
+      description: pet.description.substring(0, 160),
+      openGraph: pet.image_url
+        ? {
+            images: [
+              {
+                url: pet.image_url,
+                width: 1200,
+                height: 630,
+                alt: `Photo of ${pet.name}`,
+              },
+            ],
+          }
+        : undefined,
     };
   } catch (error) {
     console.error('Error generating metadata:', error);
     return {
-      title: 'Error',
-      description: 'An error occurred while loading the pet',
+      title: 'Pet Details',
+      description: 'Find your new best friend',
     };
   }
 }
@@ -104,8 +116,8 @@ async function getPet(id: string): Promise<Pet | null> {
 }
 
 export default async function PetDetailPage({ params }: { params: PageParams }) {
-  // Extract the id from params
-  const id = params?.id;
+  // Extract the id from params - make sure to await
+  const id = await Promise.resolve(params.id);
   
   if (!id) {
     notFound();

@@ -8,7 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { createAdminClient } from '@/lib/supabase-admin';
+import { createAdminClient, performAdminOperation } from '@/lib/supabase-admin';
 
 // Define validation schema for adoption requests
 const adoptionRequestSchema = z.object({
@@ -66,80 +66,85 @@ async function getCurrentUserId(): Promise<string | null> {
  * Server action that handles form submission for adoption requests
  * Uses the admin client to bypass RLS
  */
-export async function createAdoptionRequest(formData: FormData): Promise<ActionResult<{ id: string }>> {
+export async function createAdoptionRequest(petId: string, userId: string, message: string): Promise<ActionResult<{ id: string }>> {
   try {
-    // Get data from form
-    const userId = formData.get('userId') as string;
-    const petId = formData.get('petId') as string;
-    const message = formData.get('message') as string;
-    const agreeToTerms = formData.get('agreeToTerms') === 'true';
-    
-    // Validate user ID
-    if (!userId) {
-      console.error('No user ID provided in form data');
-      return { 
-        success: false, 
-        error: 'You must be logged in to request an adoption' 
-      };
-    }
-    
-    // Validate form data
-    const validationResult = adoptionRequestSchema.safeParse({
-      message,
-      petId,
-      agreeToTerms,
-      userId
-    });
-
-    if (!validationResult.success) {
+    // Basic validation
+    if (!petId) {
       return {
         success: false,
-        error: validationResult.error.errors[0].message
+        error: 'Pet ID is required'
       };
     }
-    
-    // Create admin client that bypasses RLS
-    const supabase = createAdminClient();
-    
-    // Insert adoption request using admin client
-    const { data, error } = await supabase
-      .from('adoptions')
-      .insert({
-        pet_id: petId,
-        adopter_id: userId,
-        message: message,
-        status: 'pendiente'
-      })
-      .select('id')
-      .single();
-    
-    if (error) {
-      console.error('Error creating adoption request:', error);
-      return { 
-        success: false, 
-        error: `Failed to create adoption request: ${error.message}` 
+
+    if (!userId) {
+      return {
+        success: false,
+        error: 'User ID is required'
       };
     }
-    
-    // Update pet status
-    const { error: updateError } = await supabase
-      .from('pets')
-      .update({ status: 'en_proceso' })
-      .eq('id', petId);
-    
-    if (updateError) {
-      console.error('Error updating pet status:', updateError);
+
+    if (!message) {
+      return {
+        success: false,
+        error: 'Message is required'
+      };
+    }
+
+    // Validate with zod schema if needed
+    if (adoptionRequestSchema) {
+      const validationResult = adoptionRequestSchema.safeParse({
+        petId,
+        userId,
+        message
+      });
+
+      if (!validationResult.success) {
+        return {
+          success: false,
+          error: validationResult.error.errors[0].message
+        };
+      }
     }
     
-    revalidatePath('/adoptions');
-    revalidatePath(`/pets/${petId}`);
-    return { success: true, data: { id: data.id } };
+    // Use performAdminOperation to execute and log the admin action
+    const result = await performAdminOperation({
+      action: 'create_adoption_request',
+      table: 'adoptions',
+      userId,
+      details: { petId, message },
+      operation: async () => {
+        // Create admin client that bypasses RLS
+        const supabase = createAdminClient();
+        
+        // Insert adoption request using admin client
+        const { data, error } = await supabase
+          .from('adoptions')
+          .insert({
+            pet_id: petId,
+            adopter_id: userId,
+            message: message,
+            status: 'pendiente'
+          })
+          .select('id')
+          .single();
+        
+        if (error) {
+          throw new Error(`Failed to create adoption request: ${error.message}`);
+        }
+        
+        return data;
+      }
+    });
     
-  } catch (err) {
-    console.error('Error in createAdoptionRequest:', err);
+    return { 
+      success: true, 
+      data: result
+    };
+  } catch (error) {
+    console.error('Error creating adoption request:', error);
     return { 
       success: false, 
-      error: 'An unexpected error occurred' 
+      error: error instanceof Error ? error.message : 'Unknown error creating adoption request'
     };
   }
 }
