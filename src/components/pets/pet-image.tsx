@@ -107,6 +107,11 @@ export function PetImage({
         isLoading && showSkeleton ? "animate-pulse" : "",
         containerClassName
       )}
+      /* 
+       * Intentionally using inline styles for dynamic width and height values.
+       * Tailwind utilities are ideal for design system values, but inline styles
+       * are appropriate for truly dynamic values that can't be predetermined.
+       */
       style={width && height ? { width, height } : undefined}
     >
       <Image

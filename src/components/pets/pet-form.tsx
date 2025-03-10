@@ -420,7 +420,7 @@ export function PetForm({ pet, onSubmit, submitButtonText = 'Save Pet', userId }
                         src={imagePreview} 
                         alt="Pet preview" 
                         fill 
-                        style={{ objectFit: 'cover' }} 
+                        className="object-cover" 
                       />
                       <Button
                         type="button"

@@ -1,12 +1,22 @@
-/** @type {import('tailwindcss').Config} */
+/** 
+ * @type {import('tailwindcss').Config} 
+ * 
+ * This configuration uses the tailwind.preset.js file which contains
+ * all design tokens migrated from ui.config.ts.
+ * This is part of the migration to a pure Tailwind CSS approach.
+ */
+
+const preset = require('./tailwind.preset.js');
+
 module.exports = {
+  presets: [preset],
   darkMode: ["class"],
   content: [
     './pages/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
-	],
+  ],
   theme: {
     container: {
       center: true,
@@ -16,6 +26,8 @@ module.exports = {
       },
     },
     extend: {
+      // We're keeping the legacy color classes for backward compatibility
+      // during the migration process. These will be removed in subsequent steps.
       colors: {
         // Primary purple
         "adopt-purple": {
@@ -69,52 +81,8 @@ module.exports = {
           800: "#1f2937",
           900: "#111827",
         },
-        // Functional colors
-        "success": "#10b981",
-        "warning": "#f59e0b",
-        "error": "#ef4444",
-        "info": "#3b82f6",
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
       },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-        xl: "calc(var(--radius) + 4px)",
-        "2xl": "calc(var(--radius) + 8px)",
-      },
+      // These keyframes will be merged with those from the preset
       keyframes: {
         "accordion-down": {
           from: { height: 0 },
@@ -124,14 +92,6 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: 0 },
         },
-        fadeIn: {
-          from: { opacity: 0 },
-          to: { opacity: 1 },
-        },
-        fadeInUp: {
-          from: { opacity: 0, transform: "translateY(10px)" },
-          to: { opacity: 1, transform: "translateY(0)" },
-        },
         slideDown: {
           from: { height: 0, opacity: 0 },
           to: { height: "var(--radix-collapsible-content-height)", opacity: 1 },
@@ -140,18 +100,32 @@ module.exports = {
           from: { height: "var(--radix-collapsible-content-height)", opacity: 1 },
           to: { height: 0, opacity: 0 },
         },
+        "text-shimmer": {
+          "0%": {
+            "background-position": "0% 50%",
+          },
+          "50%": {
+            "background-position": "100% 50%",
+          },
+          "100%": {
+            "background-position": "0% 50%",
+          },
+        },
+        "slide-out-right": {
+          "0%": { transform: "translateX(0)", opacity: "1" },
+          "100%": { transform: "translateX(100%)", opacity: "0" },
+        },
       },
+      // These animations will be merged with those from the preset
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fadeIn": "fadeIn 0.3s ease-out",
-        "fadeInUp": "fadeInUp 0.4s ease-out",
         "slideDown": "slideDown 0.3s ease-out",
         "slideUp": "slideUp 0.3s ease-out",
+        "text-shimmer": "text-shimmer 3s infinite",
+        "slide-out-right": "slide-out-right 0.3s ease-out forwards",
       },
-      fontFamily: {
-        sans: ["var(--font-sans)", "sans-serif"],
-      },
+      // Additional shadows not in the preset
       boxShadow: {
         card: "0 2px 8px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.05)",
         purple: "0 3px 12px rgba(139, 92, 246, 0.3)",
