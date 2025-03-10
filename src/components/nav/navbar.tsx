@@ -32,6 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from '@/components/theme-toggle';
 
 interface NavLinkProps {
   href: string;
@@ -306,93 +307,55 @@ export function Navbar() {
 
   return (
     <header
-      className="sticky top-0 z-50 w-full bg-white border-b border-gray-100 shadow-sm"
-      role="banner"
+      className={cn(
+        "sticky top-0 z-40 w-full transition-all duration-200",
+        isScrolled ? "bg-background/80 backdrop-blur-md shadow-sm" : "bg-background"
+      )}
     >
-      <div className="container px-4 mx-auto">
-        <div className="flex h-16 items-center justify-between">
-          {/* Logo & Brand */}
-          <div className="flex items-center mr-4">
-            <Link 
-              href="/" 
-              className="flex items-center space-x-2"
-              aria-label="Adopt Homepage"
-            >
-              <div className="relative">
-                <span className="bg-primary rounded-xl w-10 h-10 flex items-center justify-center">
-                  <Dog size={20} className="text-white" />
-                </span>
-              </div>
-              <span className="font-bold text-xl text-primary">
-                Adopt
-              </span>
-            </Link>
-          </div>
+      <div className="container flex h-16 items-center justify-between">
+        {/* Logo and brand */}
+        <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
+            <Dog className="h-6 w-6 text-primary" />
+            <span className="font-bold text-xl">AdoptMe</span>
+          </Link>
+        </div>
+
+        {/* Desktop navigation */}
+        <nav className="hidden md:flex items-center gap-1">
+          <NavLink href="/" label="Home" icon={<Home size={18} />} />
+          <NavLink href="/pets" label="Find Pets" icon={<Search size={18} />} />
+          <NavLink href="/about" label="About" icon={<Info size={18} />} />
+          <NavLink href="/contact" label="Contact" icon={<MessageSquare size={18} />} />
+          {isAuthenticated && (
+            <NavLink href="/favorites" label="Favorites" icon={<Heart size={18} />} />
+          )}
+        </nav>
+
+        {/* Right side actions */}
+        <div className="flex items-center gap-2">
+          {/* Theme toggle */}
+          <ThemeToggle />
           
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center flex-1 justify-center">
-            <ul className="flex space-x-6 items-center">
-              {mainNavItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 text-sm font-medium",
-                      pathname === item.href 
-                        ? "text-primary" 
-                        : "text-gray-600 hover:text-primary"
-                    )}
-                  >
-                    {item.icon && (
-                      <span>{item.icon}</span>
-                    )}
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-          
-          {/* Right Section with Search & Auth */}
-          <div className="flex items-center gap-3">
-            <div className="relative hidden md:flex items-center">
-              {/* Persistent search input for desktop */}
-              <div className="relative flex items-center">
-                <Search size={16} className="absolute left-3 text-gray-400" />
-                <Input
-                  id="search-navbar-desktop"
-                  type="search"
-                  placeholder="Search for pets..."
-                  className="h-10 w-64 pl-9 pr-3 bg-gray-50 border border-gray-200 rounded-lg text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const value = e.currentTarget.value;
-                      if (value) {
-                        router.push(`/search?q=${encodeURIComponent(value)}`);
-                      }
-                    }
-                  }}
-                />
-              </div>
-            </div>
-            
-            {/* Auth UI (Sign in/up buttons or user menu) */}
-            <div className="hidden md:flex">
-              {mounted && renderAuthUI()}
-            </div>
-            
-            {/* Mobile Menu Toggle */}
-            <div className="md:hidden">
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-full w-9 h-9 bg-primary text-white hover:bg-primary-dark"
-                aria-label={menuState === 'closed' ? "Open menu" : "Close menu"}
-                onClick={toggleMobileMenu}
-              >
-                {menuState === 'closed' ? <Menu size={18} /> : <X size={18} />}
-              </button>
-            </div>
-          </div>
+          {/* Auth UI (login/profile) */}
+          {renderAuthUI()}
+
+          {/* Mobile menu toggle */}
+          <button
+            type="button"
+            className="inline-flex md:hidden items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary"
+            aria-expanded={menuState === 'open'}
+            onClick={toggleMobileMenu}
+          >
+            <span className="sr-only">
+              {menuState === 'open' ? 'Close main menu' : 'Open main menu'}
+            </span>
+            {menuState === 'open' ? (
+              <X className="block h-6 w-6" aria-hidden="true" />
+            ) : (
+              <Menu className="block h-6 w-6" aria-hidden="true" />
+            )}
+          </button>
         </div>
       </div>
       

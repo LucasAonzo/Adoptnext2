@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Heart, Calendar, ChevronRight } from 'lucide-react';
+import { Heart, Calendar, ChevronRight, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -206,13 +206,12 @@ export function PetCard({ pet, className = "", href }: PetCardProps) {
       {/* Footer with action button */}
       <CardFooter className="p-4 pt-0">
         <Button 
-          variant="default" 
-          className="w-full justify-between transition-all shadow-sm group/button"
+          className="bg-primary hover:bg-primary-dark text-white rounded-full w-full px-6 py-5 shadow-lg shadow-primary/20 transition-all hover:brightness-110"
           asChild
         >
-          <Link href={petLink} className="inline-flex items-center gap-2">
-            <span>{petData.status === 'disponible' ? 'Adopt Me' : 'View Details'}</span>
-            <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover/button:translate-x-1" />
+          <Link href={petLink} className="flex items-center justify-center gap-3">
+            <span className="text-white font-medium">See more info</span>
+            <ArrowRight className="h-4 w-4 text-white" />
           </Link>
         </Button>
       </CardFooter>

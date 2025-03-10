@@ -3,24 +3,36 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { projectRef } from '@/lib/supabase';
 
+// Environment-based logging flag - only logs in development when explicitly enabled
+const ENABLE_MIDDLEWARE_LOGS = false; // Set to true only when debugging middleware issues
+
+/**
+ * Simple logging utility that only logs when enabled
+ */
+function debugLog(...args: any[]) {
+  if (ENABLE_MIDDLEWARE_LOGS && process.env.NODE_ENV === 'development') {
+    console.log(...args);
+  }
+}
+
 export async function middleware(request: NextRequest) {
   // Log the request URL for debugging
-  console.log('Middleware - Processing URL:', request.nextUrl.pathname);
+  debugLog('Middleware - Processing URL:', request.nextUrl.pathname);
   
   // Get all cookies for debugging
   const allCookies = Array.from(request.cookies.getAll()).map(c => c.name);
-  console.log('Middleware - All cookies:', allCookies);
+  debugLog('Middleware - All cookies:', allCookies);
   
   // Check for auth cookies with any Supabase project reference
   const authCookies = allCookies.filter(name => 
     name.startsWith('sb-') && name.includes('-auth-token')
   );
-  console.log('Middleware - Auth cookies found:', authCookies);
+  debugLog('Middleware - Auth cookies found:', authCookies);
   
   // Check specific project cookie
   const projectCookie = `sb-${projectRef}-auth-token`;
   const hasProjectCookie = request.cookies.has(projectCookie);
-  console.log(`Middleware - Project-specific auth cookie (${projectCookie}) present:`, hasProjectCookie);
+  debugLog(`Middleware - Project-specific auth cookie (${projectCookie}) present:`, hasProjectCookie);
   
   // Initialize response that we'll modify with cookies if needed
   let response = NextResponse.next();
@@ -36,12 +48,12 @@ export async function middleware(request: NextRequest) {
 
     // Debug logging
     if (session) {
-      console.log('Middleware - Session found for user:', session.user.id);
+      debugLog('Middleware - Session found for user:', session.user.id);
     } else {
-      console.log('Middleware - No valid session found');
+      debugLog('Middleware - No valid session found');
       
       if (hasProjectCookie) {
-        console.log('Middleware - Auth cookie exists but no session - possible invalid/expired token');
+        debugLog('Middleware - Auth cookie exists but no session - possible invalid/expired token');
       }
     }
 
@@ -51,7 +63,7 @@ export async function middleware(request: NextRequest) {
         request.nextUrl.searchParams.get('redirect') || '/',
         request.url
       );
-      console.log('Middleware - User already authenticated, redirecting from /auth to:', redirectPath.pathname);
+      debugLog('Middleware - User already authenticated, redirecting from /auth to:', redirectPath.pathname);
       return NextResponse.redirect(redirectPath);
     }
 
@@ -69,7 +81,10 @@ export async function middleware(request: NextRequest) {
     
     return response;
   } catch (error) {
-    console.error('Middleware - Error checking authentication:', error);
+    // Only log errors in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Middleware - Error checking authentication:', error);
+    }
     return response;
   }
 }
