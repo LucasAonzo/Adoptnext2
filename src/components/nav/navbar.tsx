@@ -312,7 +312,7 @@ export function Navbar() {
         isScrolled ? "bg-background/80 backdrop-blur-md shadow-sm" : "bg-background"
       )}
     >
-      <div className="container flex h-16 items-center justify-between">
+      <div className="container flex h-16 items-center justify-between px-4 mx-auto">
         {/* Logo and brand */}
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
@@ -334,9 +334,6 @@ export function Navbar() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-2">
-          {/* Theme toggle */}
-          <ThemeToggle />
-          
           {/* Auth UI (login/profile) */}
           {renderAuthUI()}
 

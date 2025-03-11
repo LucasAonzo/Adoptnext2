@@ -5,10 +5,10 @@ import { cn } from '../../lib/utils';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from './card';
 
 /**
- * Example of creating card variants using composition instead of props
+ * Enhanced card variants with modern styling and better user experience
  * 
- * This approach allows for complete styling flexibility while maintaining
- * a clean component API focused on structure.
+ * These variants use a composition approach for maximum flexibility
+ * while maintaining consistent styling and interaction patterns.
  */
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -31,11 +31,16 @@ export function PrimaryCard({ className, children, ...props }: CardProps) {
     <Card 
       className={cn(
         "bg-primary text-primary-foreground border-transparent",
-        "shadow-md hover:shadow-lg transition-shadow duration-200",
+        "shadow-lg shadow-primary/20",
+        "hover:shadow-xl hover:shadow-primary/25",
+        "transition-all duration-300",
+        "relative overflow-hidden",
         className
       )} 
       {...props}
     >
+      {/* Subtle animated gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
       {children}
     </Card>
   );
@@ -56,12 +61,15 @@ export function OutlinedCard({ className, children, ...props }: CardProps) {
   return (
     <Card 
       className={cn(
-        "bg-transparent border-2 border-primary/20",
-        "hover:border-primary/50 transition-colors duration-200",
+        "bg-background border-2 border-primary/20",
+        "hover:border-primary/40 transition-colors duration-300",
+        "shadow-none hover:shadow-sm",
+        "relative overflow-hidden",
         className
       )} 
       {...props}
     >
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary/70 scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
       {children}
     </Card>
   );
@@ -83,12 +91,15 @@ export function FeatureCard({ className, children, ...props }: CardProps) {
   return (
     <Card 
       className={cn(
-        "border-border/30 bg-gradient-to-br from-card to-background",
-        "shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5",
+        "border-none bg-gradient-to-br from-card to-background",
+        "shadow-lg hover:shadow-xl",
+        "transition-all duration-300 hover:-translate-y-1",
+        "group",
         className
       )} 
       {...props}
     >
+      <div className="absolute inset-0 rounded-xl border-2 border-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       {children}
     </Card>
   );
@@ -110,7 +121,8 @@ export function CompactCard({ className, children, ...props }: CardProps) {
     <Card 
       className={cn(
         "border-border/20 shadow-sm",
-        "hover:bg-accent/5 transition-colors duration-200",
+        "hover:bg-accent/5 hover:border-border/30",
+        "transition-all duration-200",
         className
       )} 
       {...props}
@@ -133,8 +145,16 @@ export function InteractiveCard({ className, children, ...props }: CardProps) {
     <Card 
       className={cn(
         "cursor-pointer border-border/30",
-        "shadow-sm hover:shadow-md transition-all duration-200",
-        "hover:-translate-y-0.5 hover:bg-accent/5 active:translate-y-0",
+        "shadow-sm hover:shadow-md",
+        "transition-all duration-200",
+        "hover:-translate-y-1 active:translate-y-0",
+        "hover:bg-accent/5 active:bg-accent/10",
+        "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2",
+        // Pulse effect on hover
+        "after:absolute after:inset-0 after:rounded-xl after:border-2 after:border-primary/0",
+        "hover:after:border-primary/20 after:transition-all after:duration-500",
+        "after:scale-[1.02] hover:after:scale-105",
+        "overflow-visible relative",
         className
       )} 
       {...props}

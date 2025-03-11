@@ -1,27 +1,41 @@
 'use client';
 
 import { Pet as PetType } from '@/types/pets';
-import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import Image from 'next/image';
+import { useState, memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Heart, Calendar, ChevronRight, ArrowRight } from 'lucide-react';
+import { Calendar, MapPin, Heart, ChevronRight, Check, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
-
-// Default image to use when pet image is not available
-const DEFAULT_PET_IMAGE = '/images/default-pet.jpg';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Status mapping for display
 const STATUS_MAP: Record<
   string,
-  { label: string; variant: 'default' | 'outline' | 'secondary' | 'destructive' | 'success' }
+  { label: string; variant: 'default' | 'outline' | 'secondary' | 'destructive'; className?: string }
 > = {
-  disponible: { label: 'Available', variant: 'success' },
-  adoptado: { label: 'Adopted', variant: 'secondary' },
-  en_proceso: { label: 'In Process', variant: 'outline' },
-  reservado: { label: 'Reserved', variant: 'default' },
+  disponible: { 
+    label: 'Available', 
+    variant: 'default',
+    className: 'bg-violet-600 hover:bg-violet-700 text-white' 
+  },
+  adoptado: { 
+    label: 'Adopted', 
+    variant: 'secondary',
+    className: 'bg-blue-500 text-white' 
+  },
+  en_proceso: { 
+    label: 'In Process', 
+    variant: 'outline',
+    className: 'border-amber-500 text-amber-600 bg-amber-50' 
+  },
+  reservado: { 
+    label: 'Reserved', 
+    variant: 'default',
+    className: 'bg-gray-500 text-white' 
+  },
 };
 
 // Gender mapping for display
@@ -42,16 +56,6 @@ const TYPE_MAP: Record<string, string> = {
   cat: 'Cat',
   bird: 'Bird',
   exotic: 'Exotic',
-};
-
-// Size mapping for display
-const SIZE_MAP: Record<string, string> = {
-  pequeno: 'Small',
-  mediano: 'Medium',
-  grande: 'Large',
-  small: 'Small',
-  medium: 'Medium',
-  large: 'Large',
 };
 
 // Helper function to truncate text
@@ -75,143 +79,195 @@ interface PetCardProps {
   pet: PetType;
   className?: string;
   href?: string;
+  onFavoriteToggle?: (petId: string, isFavorite: boolean) => void;
 }
 
-export function PetCard({ pet, className = "", href }: PetCardProps) {
+// Pet Card Image component with enhanced placeholder
+const PetCardImage = memo(({ src, name }: { src?: string; name: string }) => {
+  return (
+    <div className="relative w-full h-48 overflow-hidden rounded-t-lg bg-gray-100">
+      {src ? (
+        <Image
+          src={src}
+          alt={`Photo of ${name}`}
+          className="object-cover transition-transform duration-300 group-hover:scale-105"
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          priority
+        />
+      ) : (
+        <div 
+          className="w-full h-full flex items-center justify-center bg-gray-100"
+          aria-label={`No photo available for ${name}`}
+        >
+          <span className="text-gray-400 text-lg font-medium">No photo available</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
+PetCardImage.displayName = 'PetCardImage';
+
+// Pet Status Badge component with custom styling
+const PetStatusBadge = memo(({ status }: { status: typeof STATUS_MAP[keyof typeof STATUS_MAP] }) => {
+  return (
+    <Badge 
+      variant={status.variant}
+      className={cn("absolute top-4 right-4 z-10 shadow-sm", status.className)}
+    >
+      {status.label}
+    </Badge>
+  );
+});
+
+PetStatusBadge.displayName = 'PetStatusBadge';
+
+// Favorite Button component
+const FavoriteButton = memo(({ 
+  isFavorite, 
+  onClick 
+}: { 
+  isFavorite: boolean; 
+  onClick: (e: React.MouseEvent) => void 
+}) => {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "absolute top-4 left-4 z-10 p-2 rounded-full",
+        "transition-all duration-200",
+        "hover:scale-110 active:scale-95",
+        "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+        "shadow-sm bg-white text-gray-400 hover:text-rose-500"
+      )}
+      aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+    >
+      <Heart 
+        className={cn(
+          "h-5 w-5 transition-all duration-200", 
+          isFavorite ? "fill-rose-500 text-rose-500" : "fill-none"
+        )}
+      />
+    </button>
+  );
+});
+
+FavoriteButton.displayName = 'FavoriteButton';
+
+export function PetCard({ pet, className = "", href, onFavoriteToggle }: PetCardProps) {
   const [isFavorite, setIsFavorite] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   
   // Cast to handle pet type variations
   const petData = pet as any;
   
-  // Determine image source with fallback
-  const hasValidImage = !imageError && petData.image_url && petData.image_url.trim() !== '';
-  const imageSrc = hasValidImage ? petData.image_url : DEFAULT_PET_IMAGE;
+  // Format display values using useMemo for performance
+  const displayData = useMemo(() => {
+    // Get status from pet data
+    const status = STATUS_MAP[petData.status] || STATUS_MAP.disponible;
+    
+    // Process traits - only use database values, no hardcoded fallbacks
+    const traits = Array.isArray(petData.traits) ? petData.traits : 
+                 (petData.personality_traits ? petData.personality_traits.split(',').map((t: string) => t.trim()) : 
+                 []);
+    
+    return {
+      status,
+      typeText: TYPE_MAP[petData.type] || 'Pet',
+      gender: GENDER_MAP[petData.gender] || { label: petData.gender || 'Unknown', icon: 'male' },
+      imageUrl: petData.image_url || petData.image || petData.photo || null,
+      petLink: href || `/pets/${petData.id}`,
+      traits,
+      name: petData.name || 'Unknown',
+      breed: petData.breed || 'Unknown breed',
+      age: petData.age !== undefined ? petData.age : null,
+      shelter: petData.shelter || petData.shelter_name || 'Local Shelter',
+      location: petData.location || petData.city || null,
+      lastCheckup: petData.last_checkup || petData.medical_checkup || null,
+      adoptionStatus: status.label || 'Available'
+    };
+  }, [petData, href]);
   
-  // Format display values
-  const status = STATUS_MAP[petData.status] || STATUS_MAP.disponible;
-  const typeText = TYPE_MAP[petData.type] || 'Pet';
-  const gender = GENDER_MAP[petData.gender] || { label: petData.gender || 'Unknown', icon: 'male' };
-  
-  // Determine link destination
-  const petLink = href || `/pets/${petData.id}`;
+  const handleMouseEnter = () => setIsHovered(true);
+  const handleMouseLeave = () => setIsHovered(false);
   
   // Handle favorite toggle
   const handleFavoriteToggle = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsFavorite(!isFavorite);
+    const newState = !isFavorite;
+    setIsFavorite(newState);
+    
+    // Call the callback if provided
+    if (onFavoriteToggle) {
+      onFavoriteToggle(petData.id, newState);
+    }
   };
 
   return (
-    <Card className={cn(
-      "overflow-hidden bg-white border-0 rounded-xl shadow-sm group",
-      "hover:shadow-md transition-all duration-300",
-      className
-    )}>
-      {/* Image section with badges */}
-      <div className="relative h-56 w-full">
-        {!imageLoaded && (
-          <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-          </div>
-        )}
-        
-        <Image 
-          src={imageSrc}
-          alt={`${petData.name} - ${petData.breed || typeText}`}
-          fill
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className={cn(
-            "object-cover transition-transform duration-500",
-            "group-hover:scale-105",
-            !imageLoaded && "opacity-0",
-            imageLoaded && "opacity-100",
-          )}
-          onLoad={() => setImageLoaded(true)}
-          onError={() => setImageError(true)}
-        />
-        
-        {/* Status badge */}
-        <div className="absolute top-3 right-3 z-10">
-          <Badge 
-            variant={mapBadgeVariant(status.variant)}
-            className={cn(
-              "font-medium",
-              gender.icon === 'male' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-pink-500 hover:bg-pink-600',
-              "text-white"
-            )}
-          >
-            {gender.label}
-          </Badge>
-        </div>
-        
-        {/* Favorite button */}
-        <button
-          onClick={handleFavoriteToggle}
-          className={cn(
-            "absolute top-3 left-3 z-10 p-2 rounded-full",
-            "transition-all duration-300 transform",
-            "hover:scale-110 active:scale-90",
-            "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-            isFavorite
-              ? "bg-rose-500/90 text-white shadow-md"
-              : "bg-white/80 text-muted-foreground hover:text-rose-500 backdrop-blur-sm"
-          )}
-          aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          <Heart 
-            className={cn(
-              "h-4 w-4 transition-all duration-300", 
-              isFavorite ? "fill-current" : "fill-none"
-            )}
-          />
-        </button>
-        
-        {/* Hover overlay gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+    <Card 
+      className={cn(
+        "overflow-hidden bg-white border border-gray-100 rounded-xl", 
+        "transition-all duration-300 group",
+        "hover:shadow-md hover:translate-y-[-2px]",
+        className
+      )}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Image section with badge and favorite button */}
+      <div className="relative">
+        <PetCardImage src={displayData.imageUrl} name={displayData.name} />
+        <PetStatusBadge status={displayData.status} />
+        <FavoriteButton isFavorite={isFavorite} onClick={handleFavoriteToggle} />
       </div>
       
-      {/* Content section */}
-      <CardContent className="p-4 relative">
-        <h3 className="font-bold text-xl text-gray-900 group-hover:text-primary transition-colors">
-          {petData.name}
-        </h3>
-        
-        <p className="text-primary/80 font-medium">
-          {petData.breed || typeText}
-        </p>
-        
-        <div className="text-sm text-muted-foreground mt-2 flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-            <Calendar className="h-3 w-3" />
-            {petData.age ? `${petData.age} ${petData.age === 1 ? 'year' : 'years'}` : 'Age unknown'}
-          </span>
+      <CardContent className="sm:py-5 text-foreground/80 last:pb-6 p-4 pt-5">
+        {/* Minimalist content section with mobile-friendly design */}
+        <div className="flex flex-col gap-3">
+          {/* Simplified header with subtler elements */}
+          <div className="flex items-center justify-between">
+            {/* Pet name with smaller, more elegant typography */}
+            <div className="flex items-center">
+              <div className="w-1 h-4 bg-violet-300 rounded-full mr-2 opacity-70"></div>
+              <h3 className="text-lg font-medium text-gray-700 group-hover:text-violet-600 transition-colors">
+                {displayData.name}
+              </h3>
+            </div>
+            
+            {/* Minimalist age indicator */}
+            {displayData.age !== null && (
+              <div className="flex items-center">
+                <span className="text-sm font-normal text-gray-500 mr-1">
+                  {displayData.age}
+                </span>
+                <span className="text-xs text-gray-400">
+                  {displayData.age === 1 ? 'year' : 'yrs'}
+                </span>
+              </div>
+            )}
+          </div>
           
-          {status.label !== 'Unknown' && (
-            <span className={cn(
-              "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium",
-              status.variant === 'success' ? "bg-green-100 text-green-800" :
-              status.variant === 'destructive' ? "bg-red-100 text-red-800" :
-              status.variant === 'secondary' ? "bg-blue-100 text-blue-800" :
-              "bg-gray-100 text-gray-800"
-            )}>
-              {status.label}
-            </span>
-          )}
+          {/* Minimal separator */}
+          <div className="h-px w-full bg-gray-100"></div>
         </div>
       </CardContent>
       
-      {/* Footer with action button */}
-      <CardFooter className="p-4 pt-0">
+      {/* Action Buttons - only View Details */}
+      <CardFooter className="p-4 pt-0 flex justify-center">
         <Button 
-          className="bg-primary hover:bg-primary-dark text-white rounded-full w-full px-6 py-5 shadow-lg shadow-primary/20 transition-all hover:brightness-110"
+          className={cn(
+            "bg-violet-600 hover:bg-violet-700 text-white rounded-full",
+            "flex items-center justify-center gap-1.5",
+            "transition-all duration-200 w-full",
+            "shadow-sm h-auto py-2.5 px-6"
+          )}
           asChild
         >
-          <Link href={petLink} className="flex items-center justify-center gap-3">
-            <span className="text-white font-medium">See more info</span>
-            <ArrowRight className="h-4 w-4 text-white" />
+          <Link href={displayData.petLink}>
+            <span>View Details</span>
+            <ChevronRight className="h-4 w-4" />
           </Link>
         </Button>
       </CardFooter>

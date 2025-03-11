@@ -13,6 +13,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Edit, Mail, MapPin, Phone, User } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 interface UserProfileCardProps {
   profile: UserProfile | null;
@@ -42,7 +43,7 @@ export function UserProfileCard({ profile, isLoading = false }: UserProfileCardP
 
   if (!profile) {
     return (
-      <Card className="w-full">
+      <Card className="w-full shadow-md">
         <CardHeader>
           <CardTitle>Profile Not Found</CardTitle>
           <CardDescription>
@@ -59,53 +60,64 @@ export function UserProfileCard({ profile, isLoading = false }: UserProfileCardP
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="text-2xl font-bold">My Profile</CardTitle>
-        <CardDescription>Your personal information and account settings</CardDescription>
+    <Card className={cn(
+      "w-full transition-all duration-300",
+      "hover:shadow-lg hover:border-primary/10"
+    )}>
+      <CardHeader className="border-b border-border/10 bg-gradient-to-b from-card/50 to-card">
+        <CardTitle className="text-2xl font-bold text-foreground/90">My Profile</CardTitle>
+        <CardDescription className="text-muted-foreground leading-relaxed">
+          Your personal information and account settings
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-1">
+      <CardContent className="space-y-6 px-6 py-5">
+        <div className="space-y-2 group">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <User className="h-4 w-4" />
+            <User className="h-4 w-4 text-primary" />
             <span>Name</span>
           </div>
-          <p className="text-base font-medium">
+          <p className="text-base font-medium pl-6 group-hover:text-primary transition-colors duration-200">
             {profile.name || 'Not provided'}
           </p>
         </div>
         
-        <div className="space-y-1">
+        <div className="space-y-2 group">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Mail className="h-4 w-4" />
+            <Mail className="h-4 w-4 text-primary" />
             <span>Email</span>
           </div>
-          <p className="text-base font-medium">{profile.email}</p>
+          <p className="text-base font-medium pl-6 group-hover:text-primary transition-colors duration-200">
+            {profile.email}
+          </p>
         </div>
         
-        <div className="space-y-1">
+        <div className="space-y-2 group">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Phone className="h-4 w-4" />
+            <Phone className="h-4 w-4 text-primary" />
             <span>Phone</span>
           </div>
-          <p className="text-base font-medium">
+          <p className="text-base font-medium pl-6 group-hover:text-primary transition-colors duration-200">
             {profile.phone || 'Not provided'}
           </p>
         </div>
         
-        <div className="space-y-1">
+        <div className="space-y-2 group">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <MapPin className="h-4 w-4" />
+            <MapPin className="h-4 w-4 text-primary" />
             <span>Address</span>
           </div>
-          <p className="text-base font-medium">
+          <p className="text-base font-medium pl-6 group-hover:text-primary transition-colors duration-200">
             {profile.address || 'Not provided'}
           </p>
         </div>
       </CardContent>
-      <CardFooter className="flex justify-end">
-        <Button variant="outline" asChild>
-          <Link href="/profile/edit" className="flex items-center gap-2">
+      <CardFooter className="flex justify-end border-t border-border/10 bg-muted/5 px-6 py-4">
+        <Button 
+          variant="outline" 
+          className="flex items-center gap-2 transition-all duration-300 hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+          asChild
+        >
+          <Link href="/profile/edit">
             <Edit className="h-4 w-4" />
             Edit Profile
           </Link>
